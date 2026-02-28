@@ -16,6 +16,11 @@ export type WorkerRequest =
         language: 'typescript' | 'python' | 'c';
     }
     | {
+        type: 'initialize';
+        id: string;
+        storagePath: string;
+    }
+    | {
         type: 'parse-batch';
         id: string;
         files: { filePath: string; content: string; language: 'typescript' | 'python' | 'c' }[];
@@ -157,6 +162,10 @@ export type WorkerResponse =
         id: string;
         symbolCount: number;
         edgeCount: number;
+    }
+    | {
+        type: 'initialize-complete';
+        id: string;
     }
     | {
         type: 'parse-batch-complete';

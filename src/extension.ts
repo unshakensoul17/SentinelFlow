@@ -27,13 +27,21 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Initialize worker
     try {
-        workerManager = new WorkerManager(() => {
+        workerManager = new WorkerManager(async () => {
             vscode.window.showWarningMessage('Sentinel Flow Indexer restarted due to high memory usage.');
             outputChannel.appendLine('Worker restarted automatically.');
+            // Re-apply configuration after worker resets
+            await updateWorkerConfig();
         });
         const workerPath = path.join(context.extensionPath, 'dist', 'worker', 'worker.js');
-        await workerManager.start(workerPath);
-        outputChannel.appendLine('Worker initialized successfully');
+        const storagePath = context.storageUri ? context.storageUri.fsPath : context.globalStorageUri.fsPath;
+
+        if (!fs.existsSync(storagePath)) {
+            fs.mkdirSync(storagePath, { recursive: true });
+        }
+
+        await workerManager.start(workerPath, storagePath);
+        outputChannel.appendLine(`Worker initialized successfully with storage at ${storagePath}`);
 
         // Initialize file watcher for incremental indexing
         fileWatcherManager = new FileWatcherManager(workerManager, outputChannel);
@@ -497,7 +505,7 @@ async function refineGraph() {
             title: 'Refining graph with AI...',
             cancellable: false,
         },
-        async (progress) => {
+        async (_progress) => {
             try {
                 const result = await workerManager!.refineGraph();
                 vscode.window.showInformationMessage(

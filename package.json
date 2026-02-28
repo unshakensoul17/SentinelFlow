@@ -16,6 +16,10 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/innovators-of-ai/sentinel-flow-extension.git"
+  },
   "contributes": {
     "commands": [
       {
@@ -67,19 +71,19 @@
       "type": "object",
       "title": "Sentinel Flow",
       "properties": {
-        "codeIndexer.vertexProject": {
+        "sentinelFlow.vertexProject": {
           "type": "string",
           "description": "Google Cloud Project ID for Vertex AI (Gemini 1.5 Pro). Required for strategic analysis."
         },
-        "codeIndexer.groqApiKey": {
+        "sentinelFlow.groqApiKey": {
           "type": "string",
           "description": "Groq API Key (Llama 3.1). Required for reflex/fast analysis."
         },
-        "codeIndexer.geminiApiKey": {
+        "sentinelFlow.geminiApiKey": {
           "type": "string",
           "description": "Google Gemini API Key (Gemini 1.5 Pro). Simple alternative to Vertex AI project ID."
         },
-        "architectAI.useLSP": {
+        "sentinelFlow.useLSP": {
           "type": "boolean",
           "default": false,
           "description": "Enable LSP-based symbol resolution for 100% accurate type definitions (TypeScript/JavaScript). Uses VS Code's built-in language server."

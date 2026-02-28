@@ -69,12 +69,21 @@ async function runValidation() {
             process.exit(1);
         });
 
-        // Wait for ready signal
-        await new Promise((resolve) => {
+        // Send initialize request
+        worker.postMessage({
+            type: 'initialize',
+            id: 'test-init',
+            storagePath: require('os').tmpdir()
+        });
+
+        // Wait for initialize-complete signal
+        await new Promise((resolve, reject) => {
             const checkReady = (msg) => {
-                if (msg.type === 'ready') {
+                if (msg.type === 'initialize-complete') {
                     worker.off('message', checkReady);
                     resolve();
+                } else if (msg.type === 'error' && msg.id === 'test-init') {
+                    reject(new Error(msg.error));
                 }
             };
             worker.on('message', checkReady);

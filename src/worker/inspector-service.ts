@@ -458,6 +458,7 @@ export class InspectorService {
             };
 
         } catch (error) {
+            console.error(`[Inspector] AI Action failed:`, error);
             return {
                 action,
                 content: '',

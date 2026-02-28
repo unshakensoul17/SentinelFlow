@@ -19,8 +19,6 @@ import { StringRegistry } from './string-registry';
 import { CompositeIndex, resolvePendingCalls, resolvePendingImports, PendingCall, PendingImport } from './composite-index';
 import { NewSymbol } from '../db/schema';
 import * as path from 'path';
-import * as os from 'os';
-import * as fs from 'fs';
 
 class IndexWorker {
     private db: CodeIndexDatabase | null = null;
@@ -32,10 +30,6 @@ class IndexWorker {
 
     // Global symbol map for cross-file resolution
     private globalSymbolMap: Map<string, number> = new Map();
-
-    // Pending imports and calls for edge resolution
-    private allImports: ImportInfo[] = [];
-    private allCalls: CallInfo[] = [];
 
     constructor() {
         this.parser = new TreeSitterParser();
@@ -55,13 +49,13 @@ class IndexWorker {
     /**
      * Initialize worker resources
      */
-    async initialize(): Promise<void> {
+    async initialize(storagePath: string): Promise<void> {
         try {
             // Start memory monitoring
             this.startMemoryMonitor();
 
-            // Initialize database in temp directory
-            const dbPath = path.join(os.tmpdir(), 'sentinel-flow', 'index.db');
+            // Initialize database in provided directory
+            const dbPath = path.join(storagePath, 'index.db');
             this.db = await CodeIndexDatabase.create(dbPath);
 
             // Initialize tree-sitter parser
@@ -126,6 +120,20 @@ class IndexWorker {
      * Handle incoming messages
      */
     handleMessage(request: WorkerRequest): void {
+        if (request.type === 'initialize') {
+            this.initialize(request.storagePath)
+                .then(() => {
+                    this.sendMessage({
+                        type: 'initialize-complete',
+                        id: request.id
+                    });
+                })
+                .catch((error: Error) => {
+                    this.sendError(request.id, `Initialization failed: ${error.message}`);
+                });
+            return;
+        }
+
         if (!this.isReady) {
             this.sendError(request.id, 'Worker not initialized');
             return;
@@ -484,6 +492,7 @@ class IndexWorker {
         };
 
         // ── First pass: extract + buffer all symbols ───────────────────────
+        let fileIndex = 0;
         for (const file of files) {
             this.db.deleteSymbolsByFile(file.filePath);
 
@@ -516,6 +525,12 @@ class IndexWorker {
 
             const contentHash = CodeIndexDatabase.computeHash(file.content);
             this.db.setFileHash(file.filePath, contentHash);
+
+            // Periodically save to disk during large batches to prevent data loss on crash
+            if (isBulkBatch && fileIndex > 0 && fileIndex % 50 === 0) {
+                this.db.saveToDisk();
+            }
+            fileIndex++;
         }
 
         // Flush any remaining symbols
@@ -1058,11 +1073,6 @@ class IndexWorker {
 
 // Initialize worker
 const worker = new IndexWorker();
-
-worker.initialize().catch((error) => {
-    console.error('Fatal worker initialization error:', error);
-    process.exit(1);
-});
 
 // Listen for messages from parent
 if (parentPort) {

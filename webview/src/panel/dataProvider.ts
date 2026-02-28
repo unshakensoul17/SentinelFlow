@@ -58,6 +58,8 @@ class InspectorDataProvider {
             // Resolve or reject based on response
             if (message.error) {
                 pending.reject(new Error(message.error));
+            } else if (message.data && (message.data as any).error) {
+                pending.reject(new Error((message.data as any).error));
             } else {
                 pending.resolve(message.data);
             }

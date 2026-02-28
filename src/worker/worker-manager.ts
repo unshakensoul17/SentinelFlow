@@ -26,6 +26,7 @@ export class WorkerManager {
     private readonly REQUEST_TIMEOUT = 30000; // 30 seconds
     private restartCallback: (() => void) | null = null;
     private workerPath: string | null = null;
+    private storagePath: string | null = null;
 
     constructor(onRestart?: () => void) {
         this.restartCallback = onRestart || null;
@@ -34,12 +35,13 @@ export class WorkerManager {
     /**
      * Start the worker
      */
-    async start(workerPath: string): Promise<void> {
+    async start(workerPath: string, storagePath: string): Promise<void> {
         if (this.worker) {
             throw new Error('Worker already started');
         }
 
         this.workerPath = workerPath;
+        this.storagePath = storagePath;
         this.worker = new Worker(workerPath);
 
         // Set up message handler
@@ -64,10 +66,10 @@ export class WorkerManager {
                 this.rejectAllPending(new Error(`Worker exited with code ${code}`));
 
                 // Attempt restart
-                if (this.workerPath) {
+                if (this.workerPath && this.storagePath) {
                     try {
                         console.log('Attempting to restart worker...');
-                        await this.start(this.workerPath);
+                        await this.start(this.workerPath, this.storagePath);
                         console.log('Worker restarted successfully');
 
                         // Notify extension
@@ -83,36 +85,18 @@ export class WorkerManager {
             }
         });
 
-        // Wait for ready signal
-        await this.waitForReady();
-    }
+        // Initialize the worker with storage path
+        const response = await this.sendRequest({
+            type: 'initialize',
+            id: this.generateId(),
+            storagePath
+        }, 15000);
 
-    /**
-     * Wait for worker ready signal
-     */
-    private waitForReady(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Worker initialization timeout'));
-            }, 10000);
+        if (response.type !== 'initialize-complete') {
+            throw new Error('Worker initialization failed');
+        }
 
-            const checkReady = (message: unknown) => {
-                if (
-                    typeof message === 'object' &&
-                    message !== null &&
-                    'type' in message &&
-                    (message as any).type === 'ready'
-                ) {
-                    clearTimeout(timeout);
-                    this.isReady = true;
-                    resolve();
-                }
-            };
-
-            if (this.worker) {
-                this.worker.once('message', checkReady);
-            }
-        });
+        this.isReady = true;
     }
 
     /**
@@ -148,7 +132,7 @@ export class WorkerManager {
      * Send request to worker
      */
     private sendRequest(request: WorkerRequest, timeoutMs?: number): Promise<WorkerResponse> {
-        if (!this.worker || !this.isReady) {
+        if (!this.worker || (!this.isReady && request.type !== 'initialize')) {
             return Promise.reject(new Error('Worker not ready'));
         }
 

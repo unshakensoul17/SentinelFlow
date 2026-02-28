@@ -405,34 +405,46 @@ Keep responses brief and focused - under 30 words when possible.`;
         const client = this.geminiClient || this.vertexClient;
 
         if (!client) {
-            return {
-                content: 'AI Strategic client not available. Please set GEMINI_API_KEY or GOOGLE_CLOUD_PROJECT.',
-                model: 'none',
-                intent,
-                latencyMs: 0,
-                contextIncluded: !!context,
-                neighborCount: context?.neighbors.length,
-            };
+            throw new Error('AI Strategic client not configured. Required for default routing.');
         }
 
         // The prompt is already fully built with JSON context — pass it directly.
         // analyzeCode receives an empty neighborCode array since neighbors are
         // embedded as structured JSON inside the prompt itself.
-        const response = await client.analyzeCode(
-            prompt,
-            [],           // No separate raw neighbor code blobs
-            analysisType,
-            intent.query
-        );
+        try {
+            const response = await client.analyzeCode(
+                prompt,
+                [],           // No separate raw neighbor code blobs
+                analysisType,
+                intent.query
+            );
 
-        return {
-            content: response.content,
-            model: response.model,
-            intent,
-            latencyMs: response.latencyMs,
-            contextIncluded: !!context,
-            neighborCount: context?.neighbors.length,
-        };
+            return {
+                content: response.content,
+                model: response.model,
+                intent,
+                latencyMs: response.latencyMs,
+                contextIncluded: !!context,
+                neighborCount: context?.neighbors.length,
+            };
+        } catch (error) {
+            console.warn(`[Orchestrator] Strategic AI (${client === this.geminiClient ? 'Gemini' : 'Vertex'}) failed. Error: ${(error as Error).message}. Falling back to Reflex path (Groq).`);
+
+            // Execute fallback
+            const fallbackResponse = await this.executeReflexPath(prompt, intent, context);
+
+            // If the fallback also failed to use an AI (e.g., no Groq key), return its raw message
+            if (fallbackResponse.model === 'none') {
+                return fallbackResponse;
+            }
+
+            // Prepend a warning so the user knows this was a fallback
+            return {
+                ...fallbackResponse,
+                content: `> ⚠️ **Strategic AI unreachable.** Falling back to fast local-path analysis.\n\n${fallbackResponse.content}`,
+                model: `${fallbackResponse.model} (Fallback)`
+            };
+        }
     }
 
     /**
